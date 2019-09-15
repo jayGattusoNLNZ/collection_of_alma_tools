@@ -1,0 +1,127 @@
+
+import requests
+import configparser
+
+from bs4 import BeautifulSoup as Soup
+from make_issues_month import make_month_by_issues_days
+
+
+def pairwise(it):
+    it = iter(it)
+    while True:
+        yield next(it), next(it)
+
+def format_year(month_data):
+	months = list(month_data.keys())
+	months.sort()
+
+	months_list = []
+	for month in months:
+		months_list.append(month_data[month])
+
+	for a, b in pairwise(months_list):
+		a = a.split("\n")
+		b = b.split("\n")
+
+		c = list(zip(a, b))
+
+		for row in c:
+
+			month_1 = row[0]
+			month_2 = row[1] 
+
+			if len(month_1) != 22:
+				month_1 = month_1+" "*(22-len(month_1))
+
+			if len(month_2) != 22:
+				month_2 = month_2+" "*(22-len(month_2))
+
+			print (month_1, "   ", month_2)
+
+
+
+
+
+
+secret_file=r"secrets"
+config = configparser.ConfigParser()
+config.read(secret_file)
+alma_bibskey = config.get("configuration", "my_alma_sandbox_key")    #SB BIB (Bibliographic + Acquisition)
+
+# _______________________________________________________________________
+
+record_ui_page = "https://natlib-primo.hosted.exlibrisgroup.com/primo-explore/fulldisplay?vid=NLNZ&docid=NLNZ_ALMA21301261480002836&context=L&search_scope=NLNZ"
+title = "Advocate south"
+my_mms = "9918183771802836"
+
+url = f"https://api-eu.hosted.exlibrisgroup.com/almaws/v1/bibs?view=full&expand=d_avail&apikey={alma_bibskey}&mms_id={my_mms}"
+
+### results in a BeautifulSoup item that can searched etc
+r = requests.get( url, headers={'content-type': 'application/xml' })
+
+my_issues = {}
+my_soup = Soup((r.text), 'lxml').find("bib")
+
+issues = my_soup.find_all("datafield", {"tag":"AVD"})
+
+for issue in issues:
+	date = issue.find("subfield", {"code":"e"})
+
+	# print (date.text)
+	year, month, day, __ = date.text.split(" ")
+
+	if year not in my_issues:
+		my_issues[year] = {}
+
+	if month not in my_issues[year]:
+		my_issues[year][month] = []
+
+	if day not in my_issues[year][month]:
+		my_issues[year][month].append(day)
+
+
+def make_empty_month():
+ 	return  "{}\n".format(" "*22)*8
+
+
+print (title)
+print (my_mms)
+
+print ()
+
+years = list(my_issues.keys()) 
+years.sort()
+
+
+formated_years = {}
+for year in years:
+	months = list(my_issues[year].keys())
+	months.sort()
+	for month in months:
+		issue_days = [int(x) for x in my_issues[year][month]]
+		my_month = make_month_by_issues_days(year, month, issue_days)
+		# print (my_month)
+
+		if year not in formated_years:
+			formated_years[year] = {}
+		if month not in formated_years[year]:
+			formated_years[year][month] = my_month
+
+for year, month_data in formated_years.items():
+	print (year.center(48, '_'))
+
+	months = list(month_data.keys())
+	months.sort()
+
+	if len(months) % 2:
+		inserted_month = f"{int(months[0])-1:02d}"
+		month_data[inserted_month] = make_empty_month()
+
+	my_year = format_year(month_data)
+
+
+
+
+
+
+
